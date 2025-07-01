@@ -34,7 +34,10 @@ async def predict(category: str, file: UploadFile = File(...)):
     if img is None:
         raise HTTPException(400, "Invalid image file")
 
-    det   = _get_detector(category)         # ← lazy load here
+    det   = _get_detector(category)       # lazy-load or cached detector
     score = det.predict(img)
-    label = "defect" if score > 9.0 else "good"  # TODO: per‑category threshold
-    return {"label": label, "score": round(score, 4)}
+
+    label = "defect" if score > det.thr else "good"
+    return {"label": label,
+            "score": round(score, 4),
+            "threshold": round(det.thr, 4)}
