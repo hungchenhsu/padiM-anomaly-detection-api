@@ -3,7 +3,8 @@
 import streamlit as st, requests, cv2, numpy as np, base64
 from PIL import Image
 
-API_URL = st.secrets.get("API_URL", "https://padim-defect-detector-api.onrender.com")
+import os
+API_URL = os.getenv("API_URL", "https://padim-defect-detector-api.onrender.com")
 
 st.set_page_config(page_title="PaDiM Dashboard", layout="wide")
 st.title("🛠️ PaDiM Defect Detection Dashboard")
