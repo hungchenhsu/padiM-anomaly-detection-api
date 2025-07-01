@@ -1,0 +1,19 @@
+# === file: requirements.txt ===    
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+
+# ── core
+torch==2.3.0          # CPU build
+torchvision==0.18.0
+
+# ── CV / Science
+opencv-python-headless==4.10.0.82
+numpy>=1.26
+scikit-learn==1.5.0
+tqdm==4.66.4
+
+# ── FastAPI file upload helper
+python-multipart==0.0.9
+
+# ── (Opt.) Notebook / Local Analysis
+matplotlib>=3.9
