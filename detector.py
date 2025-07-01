@@ -3,6 +3,11 @@
 import torch, cv2, numpy as np, pathlib
 from config import DEVICE, WEIGHTS_DIR
 from model_utils import get_backbone, FeatureExtractor
+import json, os
+THR_DB = {}
+if os.path.exists("optimal_thresholds.json"):
+    with open("optimal_thresholds.json") as f:
+        THR_DB = json.load(f)
 
 # ── shared backbone cache: {arch: torch.nn.Module} ──
 _BACKBONES: dict[str, torch.nn.Module] = {}
@@ -27,6 +32,8 @@ class PaDiMDetector:
         self.extractor = FeatureExtractor(backbone, layers)
         self.mean      = state["mean"].to(DEVICE)
         self.cov_inv   = state["cov_inv"].to(DEVICE)
+
+        self.thr = THR_DB.get(category, 9.0)  # Default threshold if not found
 
     @torch.no_grad()
     def predict(self, img_bgr: np.ndarray) -> float:
