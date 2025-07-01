@@ -17,3 +17,7 @@ python-multipart==0.0.9
 
 # ── (Opt.) Notebook / Local Analysis
 matplotlib>=3.9
+
+# add Streamlit and requests
+streamlit==1.34.0
+requests==2.32.3
