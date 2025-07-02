@@ -1,38 +1,23 @@
-# === file: api/main.py === 
-"""FastAPI inference server with memory-aware lazy loading."""
-
-from __future__ import annotations
-
-from pathlib import Path
-from io import BytesIO
-
-import cv2
-import numpy as np
+# === file: api/main.py ===
+"""FastAPI inference server (lazy‑load detectors)."""
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from PIL import Image
-from torchvision import transforms as T
+import cv2, numpy as np
+from detector import PaDiMDetector
+from config import WEIGHTS_DIR
 
-from model_utils import infer_once
+app = FastAPI(title="PaDiM Anomaly Detection API")
 
-# ------------------------------------------------------------------
-# Initialisation
-# ------------------------------------------------------------------
+_DETECTORS: dict[str, PaDiMDetector] = {}
 
-WEIGHTS_DIR = Path("weights")               # adapt if needed
-VALID_CATS = {p.stem for p in WEIGHTS_DIR.glob("*.pth")}
-
-app = FastAPI(title="PaDiM / FastFlow Anomaly-Detection API")
-
-# Simple preprocessing: resize to 512×512 then convert to tensor
-PREPROC = T.Compose([
-    T.ToTensor(),
-    T.Resize(512, antialias=True),
-])
+# all valid categories = list(.pth)
+_VALID_CATS = {p.stem for p in WEIGHTS_DIR.glob("*.pth")}
 
 
-# ------------------------------------------------------------------
-# Routes
-# ------------------------------------------------------------------
+def _get_detector(cat: str) -> PaDiMDetector:
+    if cat not in _DETECTORS:
+        _DETECTORS[cat] = PaDiMDetector(cat)
+    return _DETECTORS[cat]
+
 
 @app.get("/ping")
 async def ping():
@@ -41,29 +26,18 @@ async def ping():
 
 @app.post("/predict/{category}")
 async def predict(category: str, file: UploadFile = File(...)):
-    if category not in VALID_CATS:
-        raise HTTPException(status_code=404, detail=f"Unknown category: {category}")
+    if category not in _VALID_CATS:
+        raise HTTPException(404, f"Unknown category '{category}'")
 
-    # Read and decode the uploaded image
     img_bytes = await file.read()
-    img_bgr = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
-    if img_bgr is None:
-        raise HTTPException(status_code=400, detail="Invalid image file")
+    img = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
+    if img is None:
+        raise HTTPException(400, "Invalid image file")
 
-    # Convert BGR → RGB → tensor
-    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-    img_pil = Image.fromarray(img_rgb)
-    img_tensor = PREPROC(img_pil).unsqueeze(0)  # add batch dim
+    det   = _get_detector(category)       # lazy-load or cached detector
+    score = det.predict(img)
 
-    # Inference (auto-quantise / auto-unload handled inside)
-    try:
-        score, thr = infer_once(category, img_tensor)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-    label = "defect" if score > thr else "good"
-    return {
-        "label": label,
-        "score": round(score, 4),
-        "threshold": round(thr, 4),
-    }
+    label = "defect" if score > det.thr else "good"
+    return {"label": label,
+            "score": round(score, 4),
+            "threshold": round(det.thr, 4)}
