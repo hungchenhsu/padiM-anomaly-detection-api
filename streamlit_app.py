@@ -1,9 +1,15 @@
-# === file: streamlit_app.py ===
+# === file: streamlit_app.py ===    
 """Streamlit dashboard for PaDiM REST API."""
-import streamlit as st, requests, cv2, numpy as np, base64
+import base64
+import io
+import os
+
+import cv2
+import numpy as np
+import requests
+import streamlit as st
 from PIL import Image
 
-import os
 API_URL = os.getenv("API_URL", "https://padim-defect-detector-api.onrender.com")
 
 st.set_page_config(page_title="PaDiM Dashboard", layout="wide")
@@ -11,29 +17,45 @@ st.title("🛠️ PaDiM Defect Detection Dashboard")
 st.markdown("Upload an image, pick a category, and view the anomaly score.")
 
 # Sidebar controls
-category = st.sidebar.selectbox("Category", [
-    "bottle","cable","capsule","carpet","grid","hazelnut","leather",
-    "metal_nut","pill","screw","tile","toothbrush","transistor","wood","zipper"
-])
+CATEGORY = st.sidebar.selectbox(
+    "Category",
+    [
+        "bottle", "cable", "capsule", "carpet", "grid",
+        "hazelnut", "leather", "metal_nut", "pill", "screw",
+        "tile", "toothbrush", "transistor", "wood", "zipper",
+    ],
+)
 
-uploaded = st.file_uploader("Choose an image", type=["png","jpg","jpeg"])
+UPLOADED = st.file_uploader("Choose an image", type=["png", "jpg", "jpeg"])
 
-def show_response(resp_json):
+
+def show_response(resp_json: dict) -> None:
+    """Render JSON plus optional heat-map."""
     st.subheader("Prediction Result")
     st.json(resp_json)
-    if "heatmap" in resp_json:  # if API returns heatmap b64
+
+    if "heatmap" in resp_json:
         col1, col2 = st.columns(2)
-        col1.image(uploaded, caption="Original", use_column_width=True)
+        col1.image(UPLOADED, caption="Original", use_column_width=True)
+
         heat_bytes = base64.b64decode(resp_json["heatmap"])
         heat_img = Image.open(io.BytesIO(heat_bytes))
-        col2.image(heat_img, caption="Heatmap", use_column_width=True)
+        col2.image(heat_img, caption="Heat-map", use_column_width=True)
 
-if uploaded and st.button("Predict"):
-    files = {"file": (uploaded.name, uploaded.getvalue(), uploaded.type)}
-    data = {"category": category}
-    with st.spinner("Calling API..."):
-        r = requests.post(f"{API_URL}/predict/{category}", files=files)
-        if r.status_code == 200:
-            show_response(r.json())
+
+if UPLOADED and st.button("Predict"):
+    files = {"file": (UPLOADED.name, UPLOADED.getvalue(), UPLOADED.type)}
+    with st.spinner("Calling API…"):
+        try:
+            resp = requests.post(
+                f"{API_URL}/predict/{CATEGORY}",
+                files=files,
+                timeout=180,          # increase to avoid ReadTimeout
+            )
+        except requests.exceptions.RequestException as exc:
+            st.error(f"Request failed: {exc}")
         else:
-            st.error(f"API Error {r.status_code}: {r.text}")
+            if resp.ok:
+                show_response(resp.json())
+            else:
+                st.error(resp.text)
